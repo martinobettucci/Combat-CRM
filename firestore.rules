@@ -1,0 +1,300 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function isCoach() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach';
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "Martino.Bettucci@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      let allowedFields = ['uid', 'role', 'firstName', 'lastName', 'email', 'photoUrl', 'weight', 'height', 'category', 'isPro', 'fightsTarget', 'medicalClearance', 'goals', 'availability', 'createdAt'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['uid', 'role', 'firstName', 'lastName', 'email', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
+             data.role in ['athlete', 'coach', 'admin'] &&
+             data.firstName is string && data.firstName.size() > 0 && data.firstName.size() < 100 &&
+             data.lastName is string && data.lastName.size() > 0 && data.lastName.size() < 100 &&
+             data.email is string && isValidEmail(data.email) &&
+             (!('photoUrl' in data) || isValidUrl(data.photoUrl)) &&
+             (!('weight' in data) || data.weight is number) &&
+             (!('height' in data) || data.height is number) &&
+             (!('category' in data) || (data.category is string && data.category.size() < 100)) &&
+             (!('isPro' in data) || data.isPro is bool) &&
+             (!('fightsTarget' in data) || data.fightsTarget is number) &&
+             (!('medicalClearance' in data) || data.medicalClearance is bool) &&
+             (!('goals' in data) || (data.goals is string && data.goals.size() < 2000)) &&
+             (!('availability' in data) || data.availability in ['available', 'unavailable', 'injured']) &&
+             data.createdAt is string;
+    }
+
+    function isValidOpportunity(data) {
+      let allowedFields = ['title', 'date', 'location', 'weightCategory', 'purse', 'description', 'status', 'createdBy', 'createdAt'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['title', 'date', 'location', 'weightCategory', 'status', 'createdBy', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.date is string && data.date.size() > 0 && data.date.size() < 100 &&
+             data.location is string && data.location.size() > 0 && data.location.size() < 200 &&
+             data.weightCategory is string && data.weightCategory.size() > 0 && data.weightCategory.size() < 100 &&
+             (!('purse' in data) || (data.purse is string && data.purse.size() < 100)) &&
+             (!('description' in data) || (data.description is string && data.description.size() < 5000)) &&
+             data.status in ['open', 'closed'] &&
+             data.createdBy is string && data.createdBy.size() > 0 && data.createdBy.size() < 100 &&
+             data.createdAt is string;
+    }
+
+    function isValidApplication(data) {
+      let allowedFields = ['opportunityId', 'athleteId', 'status', 'appliedAt'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['opportunityId', 'athleteId', 'status', 'appliedAt']) &&
+             data.opportunityId is string && data.opportunityId.size() > 0 && data.opportunityId.size() < 100 &&
+             data.athleteId is string && data.athleteId.size() > 0 && data.athleteId.size() < 100 &&
+             data.status in ['pending', 'accepted', 'rejected'] &&
+             data.appliedAt is string;
+    }
+
+    function isValidDocument(data) {
+      let allowedFields = ['athleteId', 'uploaderId', 'type', 'name', 'url', 'version', 'status', 'createdAt'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['athleteId', 'uploaderId', 'type', 'name', 'url', 'version', 'status', 'createdAt']) &&
+             data.athleteId is string && data.athleteId.size() > 0 && data.athleteId.size() < 100 &&
+             data.uploaderId is string && data.uploaderId.size() > 0 && data.uploaderId.size() < 100 &&
+             data.type in ['license', 'medical', 'waiver', 'other'] &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.url is string && data.url.size() > 0 && data.url.size() < 1000 &&
+             data.version is number && data.version > 0 &&
+             data.status in ['active', 'archived'] &&
+             data.createdAt is string;
+    }
+
+    function isValidNotification(data) {
+      let allowedFields = ['userId', 'title', 'message', 'type', 'read', 'createdAt'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['userId', 'title', 'message', 'type', 'read', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.message is string && data.message.size() > 0 && data.message.size() < 1000 &&
+             data.type in ['opportunity', 'event', 'schedule', 'message', 'system'] &&
+             data.read is bool &&
+             data.createdAt is string;
+    }
+
+    function isValidProgressLog(data) {
+      let allowedFields = ['athleteId', 'coachId', 'date', 'type', 'metrics', 'notes', 'createdAt'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['athleteId', 'coachId', 'date', 'type', 'createdAt']) &&
+             data.athleteId is string && data.athleteId.size() > 0 && data.athleteId.size() < 100 &&
+             data.coachId is string && data.coachId.size() > 0 && data.coachId.size() < 100 &&
+             data.date is string && data.date.size() > 0 && data.date.size() < 100 &&
+             data.type in ['training', 'metric', 'fight', 'note'] &&
+             (!('metrics' in data) || data.metrics is map) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() < 5000)) &&
+             data.createdAt is string;
+    }
+
+    function isValidNotificationPreferences(data) {
+      let allowedFields = ['userId', 'email', 'push', 'inApp', 'types'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['userId', 'email', 'push', 'inApp', 'types']) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.email is bool &&
+             data.push is bool &&
+             data.inApp is bool &&
+             data.types is list && data.types.size() <= 10;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Anyone authenticated can read user profiles (needed for coaches to see athletes, etc.)
+      // In a stricter system, we might limit this, but for this CRM, it's internal to the gym.
+      allow read: if isAuthenticated();
+      
+      // Users can create their own profile. They cannot create an admin role unless they are already an admin.
+      allow create: if isAuthenticated() && 
+                    isValidUser(request.resource.data) && 
+                    uidUnchanged() && 
+                    isOwner(userId) &&
+                    (request.resource.data.role != 'admin' || isAdmin());
+                    
+      // Users can update their own profile. They cannot change their role to admin unless they are already an admin.
+      allow update: if isAuthenticated() && 
+                    isValidUser(request.resource.data) && 
+                    uidNotModified() && 
+                    isOwner(userId) &&
+                    (request.resource.data.role in ['athlete', 'coach'] || isAdmin()) &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /opportunities/{opportunityId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                    isCoach() && 
+                    isValidOpportunity(request.resource.data) &&
+                    request.resource.data.createdBy == request.auth.uid;
+                    
+      allow update: if isAuthenticated() && 
+                    isCoach() && 
+                    isValidOpportunity(request.resource.data) &&
+                    resource.data.createdBy == request.auth.uid &&
+                    request.resource.data.createdBy == resource.data.createdBy &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+                    
+      allow delete: if isAuthenticated() && 
+                    isCoach() && 
+                    resource.data.createdBy == request.auth.uid;
+    }
+
+    match /applications/{applicationId} {
+      // Athletes can read their own applications. Coaches can read all applications.
+      allow read: if isAuthenticated() && (resource.data.athleteId == request.auth.uid || isCoach());
+      
+      // Athletes can apply for themselves
+      allow create: if isAuthenticated() && 
+                    isValidApplication(request.resource.data) &&
+                    request.resource.data.athleteId == request.auth.uid &&
+                    request.resource.data.status == 'pending';
+                    
+      // Athletes can update their own application (e.g., withdraw, which we might handle by deleting or status change)
+      // Coaches can update the status of any application.
+      allow update: if isAuthenticated() && 
+                    isValidApplication(request.resource.data) &&
+                    request.resource.data.athleteId == resource.data.athleteId &&
+                    request.resource.data.opportunityId == resource.data.opportunityId &&
+                    request.resource.data.appliedAt == resource.data.appliedAt &&
+                    (
+                      (request.auth.uid == resource.data.athleteId) || 
+                      isCoach()
+                    );
+                    
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.athleteId;
+    }
+
+    match /documents/{docId} {
+      allow read: if isAuthenticated() && (resource.data.athleteId == request.auth.uid || isCoach() || isAdmin());
+      allow create: if isAuthenticated() && 
+                    isValidDocument(request.resource.data) &&
+                    (request.resource.data.athleteId == request.auth.uid || isCoach() || isAdmin()) &&
+                    request.resource.data.uploaderId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                    isValidDocument(request.resource.data) &&
+                    (resource.data.athleteId == request.auth.uid || isCoach() || isAdmin()) &&
+                    request.resource.data.athleteId == resource.data.athleteId &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidNotification(request.resource.data);
+      allow update: if isAuthenticated() && 
+                    isValidNotification(request.resource.data) &&
+                    resource.data.userId == request.auth.uid &&
+                    request.resource.data.userId == resource.data.userId &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /notification_preferences/{prefId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+                    isValidNotificationPreferences(request.resource.data) &&
+                    request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                    isValidNotificationPreferences(request.resource.data) &&
+                    resource.data.userId == request.auth.uid &&
+                    request.resource.data.userId == resource.data.userId;
+    }
+
+    match /progress_logs/{logId} {
+      allow read: if isAuthenticated() && (resource.data.athleteId == request.auth.uid || isCoach() || isAdmin());
+      allow create: if isAuthenticated() && 
+                    isValidProgressLog(request.resource.data) &&
+                    isCoach() &&
+                    request.resource.data.coachId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                    isValidProgressLog(request.resource.data) &&
+                    isCoach() &&
+                    resource.data.coachId == request.auth.uid &&
+                    request.resource.data.athleteId == resource.data.athleteId &&
+                    request.resource.data.coachId == resource.data.coachId &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAuthenticated() && isCoach() && resource.data.coachId == request.auth.uid;
+    }
+    // -------------------------------------------------------------------------
+    // Messages
+    // -------------------------------------------------------------------------
+    function isValidMessage(data) {
+      return hasOnlyAllowedFields(['senderId', 'receiverId', 'text', 'createdAt']) &&
+             data.senderId is string && data.senderId.size() > 0 &&
+             data.receiverId is string && data.receiverId.size() > 0 &&
+             data.text is string && data.text.size() > 0 && data.text.size() <= 2000 &&
+             data.createdAt is string && isValidDateString(data.createdAt);
+    }
+
+    match /messages/{messageId} {
+      // Users can read messages they sent or received
+      allow read: if isAuthenticated() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      
+      // Users can create messages if they are the sender
+      allow create: if isAuthenticated() && 
+                    request.resource.data.senderId == request.auth.uid &&
+                    isValidMessage(request.resource.data);
+                    
+      // Messages are immutable
+      allow update, delete: if false;
+    }
+  }
+}

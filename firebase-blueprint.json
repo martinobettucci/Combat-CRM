@@ -1,0 +1,167 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the platform, either an athlete or a coach.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "role": { "type": "string", "enum": ["athlete", "coach", "admin"] },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoUrl": { "type": "string", "format": "uri" },
+        "weight": { "type": "number" },
+        "height": { "type": "number" },
+        "category": { "type": "string" },
+        "isPro": { "type": "boolean" },
+        "fightsTarget": { "type": "number" },
+        "medicalClearance": { "type": "boolean" },
+        "goals": { "type": "string" },
+        "availability": { "type": "string", "enum": ["available", "unavailable", "injured"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "role", "firstName", "lastName", "email", "createdAt"]
+    },
+    "Opportunity": {
+      "title": "Opportunity",
+      "description": "A fight opportunity posted by a coach.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "location": { "type": "string" },
+        "weightCategory": { "type": "string" },
+        "purse": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "closed"] },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "date", "location", "weightCategory", "status", "createdBy", "createdAt"]
+    },
+    "Application": {
+      "title": "Application",
+      "description": "An athlete's application to a fight opportunity.",
+      "type": "object",
+      "properties": {
+        "opportunityId": { "type": "string" },
+        "athleteId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "appliedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["opportunityId", "athleteId", "status", "appliedAt"]
+    },
+    "Document": {
+      "title": "Document",
+      "description": "A document associated with an athlete.",
+      "type": "object",
+      "properties": {
+        "athleteId": { "type": "string" },
+        "uploaderId": { "type": "string" },
+        "type": { "type": "string", "enum": ["license", "medical", "waiver", "other"] },
+        "name": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "version": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "archived"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["athleteId", "uploaderId", "type", "name", "url", "version", "status", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A notification for a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["opportunity", "event", "schedule", "message", "system"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "type", "read", "createdAt"]
+    },
+    "NotificationPreference": {
+      "title": "NotificationPreference",
+      "description": "User preferences for notifications.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "boolean" },
+        "push": { "type": "boolean" },
+        "inApp": { "type": "boolean" },
+        "types": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["userId", "email", "push", "inApp", "types"]
+    },
+    "ProgressLog": {
+      "title": "ProgressLog",
+      "description": "A progress log for an athlete.",
+      "type": "object",
+      "properties": {
+        "athleteId": { "type": "string" },
+        "coachId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "type": { "type": "string", "enum": ["training", "metric", "fight", "note"] },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "speed": { "type": "number" },
+            "power": { "type": "number" },
+            "endurance": { "type": "number" }
+          }
+        },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["athleteId", "coachId", "date", "type", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A direct message between users.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "receiverId", "text", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles."
+    },
+    "/opportunities/{opportunityId}": {
+      "schema": { "$ref": "#/entities/Opportunity" },
+      "description": "Stores fight opportunities."
+    },
+    "/applications/{applicationId}": {
+      "schema": { "$ref": "#/entities/Application" },
+      "description": "Stores applications to fight opportunities."
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/Document" },
+      "description": "Stores athlete documents."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Stores user notifications."
+    },
+    "/notification_preferences/{preferenceId}": {
+      "schema": { "$ref": "#/entities/NotificationPreference" },
+      "description": "Stores user notification preferences."
+    },
+    "/progress_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ProgressLog" },
+      "description": "Stores athlete progress logs."
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Stores direct messages."
+    }
+  }
+}

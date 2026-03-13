@@ -1,0 +1,5 @@
+{
+  "name": "Combat CRM",
+  "description": "A SaaS platform for combat sports gyms to manage athletes, fight opportunities, and operations.",
+  "requestFramePermissions": ["microphone", "geolocation"]
+}

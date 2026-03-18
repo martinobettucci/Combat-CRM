@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, signOut, User as FirebaseUser, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, deleteField } from 'firebase/firestore';
 
 export type Role = 'athlete' | 'coach' | 'admin';
 
@@ -58,7 +58,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               photoUrl: currentUser.photoURL || undefined,
               createdAt: new Date().toISOString(),
             };
-            await setDoc(docRef, newProfile);
+            
+            // Remove undefined values
+            const cleanProfile = Object.fromEntries(
+              Object.entries(newProfile).filter(([_, v]) => v !== undefined)
+            );
+            
+            await setDoc(docRef, cleanProfile);
           }
           
           const unsubscribeProfile = onSnapshot(docRef, (snap) => {
@@ -103,7 +109,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateProfile = async (data: Partial<UserProfile>) => {
     if (!user) return;
     try {
-      await setDoc(doc(db, 'users', user.uid), data, { merge: true });
+      const cleanData: any = {};
+      for (const [key, value] of Object.entries(data)) {
+        if (value === undefined) {
+          cleanData[key] = deleteField();
+        } else {
+          cleanData[key] = value;
+        }
+      }
+      await setDoc(doc(db, 'users', user.uid), cleanData, { merge: true });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
     }

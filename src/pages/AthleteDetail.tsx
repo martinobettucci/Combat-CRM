@@ -1,23 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth, UserProfile } from '../AuthContext';
 import { doc, getDoc, collection, query, where, onSnapshot, addDoc, updateDoc, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, handleFirestoreError, OperationType } from '../firebase';
-import { User as UserIcon, FileText, TrendingUp, Activity, Plus, X, Download, Clock, Upload } from 'lucide-react';
-import { format } from 'date-fns';
+import { User as UserIcon, FileText, TrendingUp, Activity, Plus, X, Download, Clock, Upload, Camera, Printer, Image as ImageIcon } from 'lucide-react';
+import { format, differenceInDays } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import clsx from 'clsx';
+import { useReactToPrint } from 'react-to-print';
+import { PrintableProfile } from '../components/PrintableProfile';
 
 interface Document {
   id: string;
   athleteId: string;
   uploaderId: string;
-  type: 'license' | 'medical' | 'waiver' | 'other';
+  type: 'license' | 'medical' | 'waiver' | 'photo-headshot' | 'photo-stance' | 'photo-fullbody' | 'other';
   name: string;
   url: string;
   version: number;
   status: 'active' | 'archived';
+  expiryDate?: string;
   createdAt: string;
 }
 
@@ -42,7 +45,7 @@ export default function AthleteDetail() {
   const navigate = useNavigate();
   
   const [athlete, setAthlete] = useState<UserProfile | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'progress' | 'documents'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'progress' | 'documents' | 'media'>('overview');
   const [loading, setLoading] = useState(true);
 
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -53,9 +56,10 @@ export default function AthleteDetail() {
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
 
   // Doc form
-  const [docType, setDocType] = useState<'license' | 'medical' | 'waiver' | 'other'>('medical');
+  const [docType, setDocType] = useState<'license' | 'medical' | 'waiver' | 'photo-headshot' | 'photo-stance' | 'photo-fullbody' | 'other'>('medical');
   const [docName, setDocName] = useState('');
   const [docFile, setDocFile] = useState<File | null>(null);
+  const [docExpiry, setDocExpiry] = useState('');
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
   // Log form
@@ -65,6 +69,12 @@ export default function AthleteDetail() {
   const [metricSpeed, setMetricSpeed] = useState('');
   const [metricPower, setMetricPower] = useState('');
   const [metricEndurance, setMetricEndurance] = useState('');
+
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: athlete ? `${athlete.firstName}_${athlete.lastName}_Profile` : 'Fighter_Profile',
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -130,10 +140,11 @@ export default function AthleteDetail() {
         url: downloadUrl,
         version: existingDocs.length > 0 ? existingDocs[0].version + 1 : 1,
         status: 'active',
+        ...(docExpiry && { expiryDate: docExpiry }),
         createdAt: new Date().toISOString()
       });
       setIsDocModalOpen(false);
-      setDocName(''); setDocFile(null);
+      setDocName(''); setDocFile(null); setDocExpiry('');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'documents');
     } finally {
@@ -195,12 +206,24 @@ export default function AthleteDetail() {
           <h1 className="text-3xl font-bold text-white">{athlete.firstName} {athlete.lastName}</h1>
           <p className="mt-1 text-zinc-400">{athlete.category || 'No category'} • {athlete.isPro ? 'Professional' : 'Amateur'}</p>
         </div>
+        <div className="flex items-center gap-4">
+          {(profile?.role === 'coach' || profile?.role === 'admin') && (
+            <button onClick={() => handlePrint()} className="inline-flex items-center gap-2 rounded-xl bg-zinc-800 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 border border-zinc-700">
+              <Printer className="h-4 w-4" /> Export PDF
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Hidden Printable Profile */}
+      <div className="hidden">
+        <PrintableProfile ref={printRef} athlete={athlete} documents={documents} progressLogs={progressLogs} />
       </div>
 
       {/* Tabs */}
       <div className="border-b border-zinc-800">
         <nav className="-mb-px flex space-x-8">
-          {['overview', 'progress', 'documents'].map((tab) => (
+          {['overview', 'progress', 'documents', 'media'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -321,13 +344,19 @@ export default function AthleteDetail() {
                     <th className="px-6 py-4 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Name</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Type</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Expires</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Version</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Date</th>
                     <th className="px-6 py-4 text-right text-xs font-medium text-zinc-400 uppercase tracking-wider">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800">
-                  {documents.map((doc) => (
+                  {documents.map((doc) => {
+                    const daysUntilExpiry = doc.expiryDate ? differenceInDays(new Date(doc.expiryDate), new Date()) : null;
+                    const isExpired = daysUntilExpiry !== null && daysUntilExpiry < 0;
+                    const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry >= 0 && daysUntilExpiry <= 30;
+
+                    return (
                     <tr key={doc.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white flex items-center gap-3">
                         <FileText className="h-5 w-5 text-zinc-500" />
@@ -339,6 +368,22 @@ export default function AthleteDetail() {
                           {doc.status}
                         </span>
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {doc.expiryDate ? (
+                          <span className={clsx(
+                            "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+                            isExpired ? "bg-red-400/10 text-red-400 ring-red-400/20" :
+                            isExpiringSoon ? "bg-yellow-400/10 text-yellow-500 ring-yellow-400/20" :
+                            "bg-zinc-400/10 text-zinc-400 ring-zinc-400/20"
+                          )}>
+                            {format(new Date(doc.expiryDate), 'MMM d, yyyy')}
+                            {isExpired && ' (Expired)'}
+                            {isExpiringSoon && ` (in ${daysUntilExpiry} days)`}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-500">-</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-400">v{doc.version}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-400">{format(new Date(doc.createdAt), 'MMM d, yyyy')}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -347,7 +392,7 @@ export default function AthleteDetail() {
                         </a>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                   {documents.length === 0 && (
                     <tr>
                       <td colSpan={6} className="px-6 py-8 text-center text-sm text-zinc-500">No documents found.</td>
@@ -358,33 +403,131 @@ export default function AthleteDetail() {
             </div>
           </div>
         )}
+        {activeTab === 'media' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-semibold text-white">Media & Photos</h2>
+                <p className="text-sm text-zinc-400 mt-1">Upload standardized photos for the fighter's profile and promotional materials.</p>
+              </div>
+              {(profile?.role === 'coach' || profile?.role === 'admin' || profile?.uid === athlete.uid) && (
+                <button onClick={() => { setDocType('photo-headshot'); setIsDocModalOpen(true); }} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400">
+                  <Camera className="h-4 w-4" /> Add Photo
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {['photo-headshot', 'photo-stance', 'photo-fullbody'].map(type => {
+                const photo = documents.find(d => d.type === type && d.status === 'active');
+                const title = type === 'photo-headshot' ? 'Headshot' : type === 'photo-stance' ? 'Fight Stance' : 'Full Body';
+                
+                return (
+                  <div key={type} className="rounded-2xl bg-zinc-900 border border-zinc-800 overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/50">
+                      <h3 className="text-sm font-medium text-white">{title}</h3>
+                      {photo && <span className="text-xs text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md">Active</span>}
+                    </div>
+                    <div className="flex-1 p-4 flex items-center justify-center min-h-[250px] bg-zinc-950/30">
+                      {photo ? (
+                        <img src={photo.url} alt={title} className="max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" />
+                      ) : (
+                        <div className="text-center text-zinc-500">
+                          <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No photo uploaded</p>
+                        </div>
+                      )}
+                    </div>
+                    {photo && (
+                      <div className="p-4 border-t border-zinc-800 bg-zinc-950/50 flex justify-between items-center">
+                        <span className="text-xs text-zinc-500">Uploaded {format(new Date(photo.createdAt), 'MMM d, yyyy')}</span>
+                        <a href={photo.url} target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:text-emerald-400 text-sm font-medium">View Original</a>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Upload Document Modal */}
       {isDocModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
           <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => setIsDocModalOpen(false)} />
-          <div className="relative w-full max-w-md rounded-2xl bg-zinc-900 p-6 shadow-2xl border border-zinc-800">
+          <div className={clsx("relative w-full rounded-2xl bg-zinc-900 p-6 shadow-2xl border border-zinc-800", docType.startsWith('photo') ? "max-w-4xl" : "max-w-md")}>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white">Upload Document</h2>
+              <h2 className="text-xl font-semibold text-white">{docType.startsWith('photo') ? 'Upload Photo' : 'Upload Document'}</h2>
               <button onClick={() => setIsDocModalOpen(false)} className="text-zinc-400 hover:text-white">
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleUploadDoc} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-white">Document Type</label>
-                <select value={docType} onChange={e => setDocType(e.target.value as any)} className="mt-1 block w-full rounded-xl border-0 bg-zinc-950 py-2 text-white shadow-sm ring-1 ring-inset ring-zinc-800 focus:ring-2 focus:ring-inset focus:ring-emerald-500 sm:text-sm">
-                  <option value="medical">Medical Certificate</option>
-                  <option value="license">Fighter License</option>
-                  <option value="waiver">Waiver / Contract</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white">Document Name</label>
-                <input required type="text" value={docName} onChange={e => setDocName(e.target.value)} placeholder="e.g. 2026 Medical Clearance" className="mt-1 block w-full rounded-xl border-0 bg-zinc-950 py-2 text-white shadow-sm ring-1 ring-inset ring-zinc-800 focus:ring-2 focus:ring-inset focus:ring-emerald-500 sm:text-sm" />
-              </div>
+            
+            <div className={clsx("flex flex-col", docType.startsWith('photo') ? "md:flex-row gap-8" : "")}>
+              
+              {/* Photo Guidelines Pane */}
+              {docType.startsWith('photo') && (
+                <div className="md:w-1/2 bg-zinc-950 rounded-xl p-6 border border-zinc-800">
+                  <h3 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
+                    <Camera className="h-5 w-5 text-emerald-500" />
+                    Guidelines for a Perfect Shot
+                  </h3>
+                  <ul className="space-y-4 text-sm text-zinc-400">
+                    <li className="flex gap-3">
+                      <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0 font-bold">1</div>
+                      <p><strong className="text-zinc-300">Lighting is key:</strong> Face a window or use bright, even lighting. Avoid harsh shadows on the face.</p>
+                    </li>
+                    <li className="flex gap-3">
+                      <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0 font-bold">2</div>
+                      <p><strong className="text-zinc-300">Clean Background:</strong> Stand against a solid, neutral-colored wall (white or light gray is best).</p>
+                    </li>
+                    <li className="flex gap-3">
+                      <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0 font-bold">3</div>
+                      <p><strong className="text-zinc-300">Framing:</strong> 
+                        {docType === 'photo-headshot' && ' Frame from the chest up. Look directly at the camera.'}
+                        {docType === 'photo-stance' && ' Show full upper body in fighting stance. Keep hands up.'}
+                        {docType === 'photo-fullbody' && ' Frame from head to toe. Stand straight with arms relaxed.'}
+                      </p>
+                    </li>
+                    <li className="flex gap-3">
+                      <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0 font-bold">4</div>
+                      <p><strong className="text-zinc-300">Attire:</strong> Wear fight gear or professional athletic wear. No sunglasses or hats.</p>
+                    </li>
+                  </ul>
+                </div>
+              )}
+
+              {/* Form Pane */}
+              <form onSubmit={handleUploadDoc} className={clsx("space-y-4", docType.startsWith('photo') ? "md:w-1/2" : "")}>
+                <div>
+                  <label className="block text-sm font-medium text-white">Type</label>
+                  <select value={docType} onChange={e => setDocType(e.target.value as any)} className="mt-1 block w-full rounded-xl border-0 bg-zinc-950 py-2 text-white shadow-sm ring-1 ring-inset ring-zinc-800 focus:ring-2 focus:ring-inset focus:ring-emerald-500 sm:text-sm">
+                    <optgroup label="Documents">
+                      <option value="medical">Medical Certificate</option>
+                      <option value="license">Fighter License</option>
+                      <option value="waiver">Waiver / Contract</option>
+                      <option value="other">Other Document</option>
+                    </optgroup>
+                    <optgroup label="Media & Photos">
+                      <option value="photo-headshot">Photo: Headshot</option>
+                      <option value="photo-stance">Photo: Fight Stance</option>
+                      <option value="photo-fullbody">Photo: Full Body</option>
+                    </optgroup>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white">{docType.startsWith('photo') ? 'Photo Title' : 'Document Name'}</label>
+                  <input required type="text" value={docName} onChange={e => setDocName(e.target.value)} placeholder={docType.startsWith('photo') ? "e.g. 2026 Official Headshot" : "e.g. 2026 Medical Clearance"} className="mt-1 block w-full rounded-xl border-0 bg-zinc-950 py-2 text-white shadow-sm ring-1 ring-inset ring-zinc-800 focus:ring-2 focus:ring-inset focus:ring-emerald-500 sm:text-sm" />
+                </div>
+                
+                {!docType.startsWith('photo') && (
+                  <div>
+                    <label className="block text-sm font-medium text-white">Expiration Date (Optional)</label>
+                    <input type="date" value={docExpiry} onChange={e => setDocExpiry(e.target.value)} className="mt-1 block w-full rounded-xl border-0 bg-zinc-950 py-2 text-white shadow-sm ring-1 ring-inset ring-zinc-800 focus:ring-2 focus:ring-inset focus:ring-emerald-500 sm:text-sm" />
+                  </div>
+                )}
               <div>
                 <label className="block text-sm font-medium text-white">File</label>
                 <div className="mt-1 flex justify-center rounded-xl border border-dashed border-zinc-700 px-6 py-10">
@@ -411,6 +554,7 @@ export default function AthleteDetail() {
                 </button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}

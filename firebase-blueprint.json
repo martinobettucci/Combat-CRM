@@ -59,11 +59,12 @@
       "properties": {
         "athleteId": { "type": "string" },
         "uploaderId": { "type": "string" },
-        "type": { "type": "string", "enum": ["license", "medical", "waiver", "other"] },
+        "type": { "type": "string", "enum": ["license", "medical", "waiver", "photo-headshot", "photo-stance", "photo-fullbody", "other"] },
         "name": { "type": "string" },
         "url": { "type": "string", "format": "uri" },
         "version": { "type": "number" },
         "status": { "type": "string", "enum": ["active", "archived"] },
+        "expiryDate": { "type": "string", "format": "date" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["athleteId", "uploaderId", "type", "name", "url", "version", "status", "createdAt"]

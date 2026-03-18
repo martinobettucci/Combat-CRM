@@ -2,10 +2,78 @@ import { useEffect, useState } from 'react';
 import { useAuth, UserProfile } from '../AuthContext';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Search, Filter, User as UserIcon } from 'lucide-react';
+import { Search, Filter, User as UserIcon, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
+import { differenceInDays } from 'date-fns';
 
 import { useNavigate } from 'react-router-dom';
+
+interface Document {
+  id: string;
+  athleteId: string;
+  name: string;
+  type: string;
+  status: string;
+  expiryDate?: string;
+}
+
+function DocumentExpiryAlert({ athleteId }: { athleteId: string }) {
+  const [expiringDocs, setExpiringDocs] = useState<Document[]>([]);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!athleteId) return;
+    const q = query(collection(db, 'documents'), where('athleteId', '==', athleteId), where('status', '==', 'active'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Document));
+      const expiring = docs.filter(doc => {
+        if (!doc.expiryDate) return false;
+        const days = differenceInDays(new Date(doc.expiryDate), new Date());
+        return days <= 30;
+      });
+      setExpiringDocs(expiring);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'documents');
+    });
+    return () => unsubscribe();
+  }, [athleteId]);
+
+  if (expiringDocs.length === 0) return null;
+
+  return (
+    <div className="rounded-xl bg-red-500/10 p-4 border border-red-500/20 mb-6">
+      <div className="flex">
+        <div className="flex-shrink-0">
+          <AlertTriangle className="h-5 w-5 text-red-400" aria-hidden="true" />
+        </div>
+        <div className="ml-3">
+          <h3 className="text-sm font-medium text-red-400">Action Required: Expiring Documents</h3>
+          <div className="mt-2 text-sm text-red-400/80">
+            <ul className="list-disc space-y-1 pl-5">
+              {expiringDocs.map(doc => {
+                const days = differenceInDays(new Date(doc.expiryDate!), new Date());
+                return (
+                  <li key={doc.id}>
+                    {doc.name} ({doc.type}) - {days < 0 ? 'Expired' : `Expires in ${days} days`}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => navigate(`/athletes/${athleteId}`)}
+              className="text-sm font-medium text-red-400 hover:text-red-300"
+            >
+              Update Documents <span aria-hidden="true">&rarr;</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { profile } = useAuth();
@@ -39,6 +107,7 @@ export default function Dashboard() {
     return (
       <div className="space-y-6">
         <h1 className="text-3xl font-bold tracking-tight text-white">Welcome back, {profile.firstName}</h1>
+        <DocumentExpiryAlert athleteId={profile.uid} />
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-2xl bg-zinc-900 p-6 border border-zinc-800">
             <h3 className="text-sm font-medium text-zinc-400">Current Category</h3>

@@ -104,16 +104,17 @@ service cloud.firestore {
     }
 
     function isValidDocument(data) {
-      let allowedFields = ['athleteId', 'uploaderId', 'type', 'name', 'url', 'version', 'status', 'createdAt'];
+      let allowedFields = ['athleteId', 'uploaderId', 'type', 'name', 'url', 'version', 'status', 'expiryDate', 'createdAt'];
       return hasOnlyAllowedFields(allowedFields) &&
              hasRequiredFields(['athleteId', 'uploaderId', 'type', 'name', 'url', 'version', 'status', 'createdAt']) &&
              data.athleteId is string && data.athleteId.size() > 0 && data.athleteId.size() < 100 &&
              data.uploaderId is string && data.uploaderId.size() > 0 && data.uploaderId.size() < 100 &&
-             data.type in ['license', 'medical', 'waiver', 'other'] &&
+             data.type in ['license', 'medical', 'waiver', 'photo-headshot', 'photo-stance', 'photo-fullbody', 'other'] &&
              data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
              data.url is string && data.url.size() > 0 && data.url.size() < 1000 &&
              data.version is number && data.version > 0 &&
              data.status in ['active', 'archived'] &&
+             (!('expiryDate' in data) || (data.expiryDate is string && data.expiryDate.size() > 0 && data.expiryDate.size() < 100)) &&
              data.createdAt is string;
     }
 

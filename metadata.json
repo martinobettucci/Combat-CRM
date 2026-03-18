@@ -1,5 +1,5 @@
 {
-  "name": "Combat CRM",
+  "name": "FightHQ.eu",
   "description": "A SaaS platform for combat sports gyms to manage athletes, fight opportunities, and operations.",
   "requestFramePermissions": ["microphone", "geolocation"]
 }

@@ -58,7 +58,7 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser(data) {
-      let allowedFields = ['uid', 'role', 'firstName', 'lastName', 'email', 'photoUrl', 'weight', 'height', 'category', 'isPro', 'fightsTarget', 'medicalClearance', 'goals', 'availability', 'createdAt'];
+      let allowedFields = ['uid', 'role', 'firstName', 'lastName', 'email', 'photoUrl', 'weight', 'height', 'category', 'isPro', 'fightsTarget', 'medicalClearance', 'goals', 'availability', 'createdAt', 'subscription'];
       return hasOnlyAllowedFields(allowedFields) &&
              hasRequiredFields(['uid', 'role', 'firstName', 'lastName', 'email', 'createdAt']) &&
              data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
@@ -75,6 +75,7 @@ service cloud.firestore {
              (!('medicalClearance' in data) || data.medicalClearance is bool) &&
              (!('goals' in data) || (data.goals is string && data.goals.size() < 2000)) &&
              (!('availability' in data) || data.availability in ['available', 'unavailable', 'injured']) &&
+             (!('subscription' in data) || data.subscription is map) &&
              data.createdAt is string;
     }
 
@@ -176,7 +177,8 @@ service cloud.firestore {
                     uidNotModified() && 
                     isOwner(userId) &&
                     (request.resource.data.role in ['athlete', 'coach'] || isAdmin()) &&
-                    request.resource.data.createdAt == resource.data.createdAt;
+                    request.resource.data.createdAt == resource.data.createdAt &&
+                    (!('subscription' in request.resource.data) || !('subscription' in resource.data) || request.resource.data.subscription == resource.data.subscription);
     }
 
     match /opportunities/{opportunityId} {

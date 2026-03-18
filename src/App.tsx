@@ -13,6 +13,7 @@ import Profile from './pages/Profile';
 import Opportunities from './pages/Opportunities';
 import AthleteDetail from './pages/AthleteDetail';
 import Messages from './pages/Messages';
+import Pricing from './pages/Pricing';
 import AIAssistant from './components/AIAssistant';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="opportunities" element={<Opportunities />} />
             <Route path="athletes/:id" element={<AthleteDetail />} />
             <Route path="messages" element={<Messages />} />
+            <Route path="pricing" element={<Pricing />} />
           </Route>
         </Routes>
         <AIAssistant />

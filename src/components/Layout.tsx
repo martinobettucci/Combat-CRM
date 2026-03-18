@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
-import { Users, Swords, User, LogOut, Menu, X, MessageSquare } from 'lucide-react';
+import { Users, Swords, User, LogOut, Menu, X, MessageSquare, CreditCard } from 'lucide-react';
 import { useState } from 'react';
 import clsx from 'clsx';
 import Notifications from './Notifications';
@@ -15,6 +15,7 @@ export default function Layout() {
     { name: 'Opportunities', href: '/opportunities', icon: Swords },
     { name: 'Messages', href: '/messages', icon: MessageSquare },
     { name: 'Profile', href: '/profile', icon: User },
+    ...(profile?.role === 'coach' || profile?.role === 'admin' ? [{ name: 'Pricing', href: '/pricing', icon: CreditCard }] : []),
   ];
 
   return (
@@ -24,7 +25,7 @@ export default function Layout() {
         <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
         <div className="fixed inset-y-0 left-0 w-64 bg-zinc-900 border-r border-zinc-800 p-6 shadow-2xl">
           <div className="flex items-center justify-between mb-8">
-            <span className="text-xl font-bold text-white">Combat CRM</span>
+            <span className="text-xl font-bold text-white">FightHQ.eu</span>
             <button onClick={() => setMobileMenuOpen(false)} className="text-zinc-400 hover:text-white">
               <X className="h-6 w-6" />
             </button>
@@ -54,7 +55,7 @@ export default function Layout() {
       {/* Desktop sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:border-r lg:border-zinc-800 lg:bg-zinc-900">
         <div className="flex h-16 shrink-0 items-center px-6 border-b border-zinc-800">
-          <span className="text-xl font-bold text-white">Combat CRM</span>
+          <span className="text-xl font-bold text-white">FightHQ.eu</span>
         </div>
         <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6">
           <nav className="flex-1 space-y-2">

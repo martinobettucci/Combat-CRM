@@ -17,7 +17,7 @@ export default function Login() {
             <Dumbbell className="h-8 w-8 text-emerald-500" />
           </div>
           <h2 className="mt-6 text-3xl font-bold tracking-tight text-white">
-            Combat CRM
+            FightHQ.eu
           </h2>
           <p className="mt-2 text-sm text-zinc-400">
             Manage your athletes, fights, and gym operations.

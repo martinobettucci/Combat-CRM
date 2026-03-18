@@ -19,6 +19,16 @@
         "medicalClearance": { "type": "boolean" },
         "goals": { "type": "string" },
         "availability": { "type": "string", "enum": ["available", "unavailable", "injured"] },
+        "subscription": {
+          "type": "object",
+          "properties": {
+            "plan": { "type": "string", "enum": ["free", "small_gym", "unlimited"] },
+            "status": { "type": "string", "enum": ["active", "past_due", "canceled", "incomplete", "incomplete_expired", "trialing", "unpaid"] },
+            "stripeCustomerId": { "type": "string" },
+            "stripeSubscriptionId": { "type": "string" },
+            "updatedAt": { "type": "string", "format": "date-time" }
+          }
+        },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "role", "firstName", "lastName", "email", "createdAt"]
